@@ -10,29 +10,46 @@
 #include <arpa/inet.h>
 #include <errno.h>
 
+const size_t MAX_MESSAGE_SIZE = 1024 * 1024;
+
 int extract_message(char **buf, char **msg)
 {
     char *newbuf;
-    int i;
+    size_t i;
 
-    *msg = 0;
-    if (*buf == 0)
+    *msg = NULL;
+    if (*buf == NULL || **buf == '\0')
         return (0);
     i = 0;
     while ((*buf)[i])
     {
-        if ((*buf)[i] == '\n')
+        if ((*buf)[i] == '\n' || i >= MAX_MESSAGE_SIZE)
         {
-            newbuf = calloc(1, sizeof(*newbuf) * (strlen(*buf + i + 1) + 1));
-            if (newbuf == 0)
+            size_t len = i + ((*buf)[i] == '\n' ? 1 : 0);
+            newbuf = calloc(1, strlen(*buf + len) + 1);
+            if (!newbuf)
                 return (-1);
-            strcpy(newbuf, *buf + i + 1);
-            *msg = *buf;
-            (*msg)[i + 1] = 0;
+            strcpy(newbuf, *buf + len);
+            *msg = calloc(1, len + 1);
+            if (!*msg)
+            {
+                free(newbuf);
+                return (-1);
+            }
+            for (size_t j = 0; j < len; j++)
+                (*msg)[j] = (*buf)[j];
+            (*msg)[len] = '\0';
+            free(*buf);
             *buf = newbuf;
             return (1);
         }
         i++;
+    }
+    if (strlen(*buf) >= MAX_MESSAGE_SIZE)
+    {
+        *msg = *buf;
+        *buf = NULL;
+        return (1);
     }
     return (0);
 }
@@ -40,17 +57,12 @@ int extract_message(char **buf, char **msg)
 char *str_join(char *buf, char *add)
 {
     char *newbuf;
-    int len;
-
-    if (buf == 0)
-        len = 0;
-    else
-        len = strlen(buf);
-    newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
-    if (newbuf == 0)
-        return (0);
-    newbuf[0] = 0;
-    if (buf != 0)
+    size_t len = buf ? strlen(buf) : 0;
+    newbuf = malloc(len + strlen(add) + 1);
+    if (!newbuf)
+        return (NULL);
+    newbuf[0] = '\0';
+    if (buf)
         strcat(newbuf, buf);
     free(buf);
     strcat(newbuf, add);
@@ -61,6 +73,7 @@ typedef struct s_client
 {
     int id;
     int fd;
+    char *buf;
     struct s_client *next;
 } t_client;
 
@@ -112,6 +125,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    t_client *clients = NULL;
     int next_id = 0;
     int max_fd = sockfd;
     fd_set read_fds;
@@ -138,11 +152,13 @@ int main(int argc, char **argv)
                 t_client *new_client = calloc(1, sizeof(t_client));
                 if (!new_client)
                 {
+                    write(STDERR_FILENO, "Fatal error\n", 12);
                     close(client_fd);
-                    continue;
+                    exit(1);
                 }
                 new_client->fd = client_fd;
                 new_client->id = next_id++;
+                new_client->buf = NULL;
                 new_client->next = clients;
                 clients = new_client;
                 if (client_fd > max_fd)
@@ -161,10 +177,23 @@ int main(int argc, char **argv)
         {
             if (FD_ISSET(curr->fd, &read_fds))
             {
-                char buf[1024];
+                char buf[65536]; // Use a reasonable size for recv
                 ssize_t ret = recv(curr->fd, buf, sizeof(buf) - 1, 0);
                 if (ret <= 0)
                 {
+                    if (curr->buf)
+                    {
+                        char *line;
+                        while (extract_message(&curr->buf, &line))
+                        {
+                            char msg[MAX_MESSAGE_SIZE + 100];
+                            sprintf(msg, "client %d: %s", curr->id, line);
+                            for (t_client *other = clients; other; other = other->next)
+                                if (other->fd != curr->fd)
+                                    send(other->fd, msg, strlen(msg), 0);
+                            free(line);
+                        }
+                    }
                     char msg[100];
                     sprintf(msg, "server: client %d just left\n", curr->id);
                     for (t_client *other = clients; other; other = other->next)
@@ -172,26 +201,32 @@ int main(int argc, char **argv)
                         if (other->fd != curr->fd)
                             send(other->fd, msg, strlen(msg), 0);
                     }
+                    close(curr->fd);
+                    if (curr->buf)
+                        free(curr->buf);
                     if (prev)
                         prev->next = curr->next;
                     else
                         clients = curr->next;
                     t_client *tmp = curr;
                     curr = curr->next;
-                    close(tmp->fd);
                     free(tmp);
-                    max_fd = sockfd;
-                    for (t_client *tmp = clients; tmp; tmp = tmp->next)
-                        if (tmp->fd > max_fd)
-                            max_fd = tmp->fd;
                     continue;
                 }
                 buf[ret] = '\0';
-                char msg[1100];
-                sprintf(msg, sizeof(msg), "client %d: %s", curr->id, buf);
-                for (t_client *other = clients; other; other = other->next)
-                    if (other->fd != curr->fd)
-                        send(other->fd, msg, strlen(msg), 0);
+                curr->buf = str_join(curr->buf, buf);
+                if (!curr->buf)
+                    fatal_error();
+                char *line;
+                while (curr->buf && extract_message(&curr->buf, &line))
+                {
+                    char msg[MAX_MESSAGE_SIZE + 100];
+                    sprintf(msg, "client %d: %s", curr->id, line);
+                    for (t_client *other = clients; other; other = other->next)
+                        if (other->fd != curr->fd)
+                            send(other->fd, msg, strlen(msg), 0);
+                    free(line);
+                }
             }
             prev = curr;
             curr = curr->next;
