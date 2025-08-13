@@ -33,8 +33,8 @@ int extract_message(char **buf, char **msg)
     {
         if ((*buf)[i] == '\n' || i >= MMS)
         {
-            size_t len = i + (*buf)[i] == '\n' ? 1 : 0;
-            newbuf = calloc(1, (strlen(*buf + len) + 1));
+            size_t len = i + ((*buf)[i] == '\n' ? 1 : 0);
+            newbuf = calloc(1, strlen(*buf + len) + 1);
             if (!newbuf)
                 return (-1);
             strcpy(newbuf, *buf + len);
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
     }
     struct sockaddr_in serv_addr;
     bzero(&serv_addr, sizeof(serv_addr));
-    serv_addr.sin_addr.s_addr = htonl(0x7f000001);
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_family = 2;
     serv_addr.sin_port = htons(atoi(argv[1]));
 
