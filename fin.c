@@ -77,21 +77,6 @@ typedef struct s_client
     struct s_client *next;
 } t_client;
 
-static t_client *clients = NULL;
-static int sockfd = -1;
-
-void free_clients(t_client *clients)
-{
-    t_client *curr = clients;
-    while (curr)
-    {
-        t_client *tmp = curr;
-        curr = curr->next;
-        close(tmp->fd);
-        free(tmp);
-    }
-}
-
 int main(int argc, char **argv)
 {
     if (argc != 2)
@@ -142,6 +127,7 @@ int main(int argc, char **argv)
         }
         if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) < 0)
             continue;
+
         if (FD_ISSET(sockfd, &read_fds))
         {
             struct sockaddr_in cli_addr;
@@ -216,7 +202,11 @@ int main(int argc, char **argv)
                 buf[ret] = '\0';
                 curr->buf = str_join(curr->buf, buf);
                 if (!curr->buf)
-                    fatal_error();
+                {
+                    write(STDERR_FILENO, "Fatal error\n", 12);
+                    close(sockfd);
+                    exit(1);
+                }
                 char *line;
                 while (curr->buf && extract_message(&curr->buf, &line))
                 {
