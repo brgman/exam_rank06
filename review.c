@@ -23,7 +23,7 @@ typedef struct s_client
 int extract_message(char **buf, char **msg)
 {
     char *newbuf;
-    size_t i; // ! size_t
+    size_t i;
 
     *msg = NULL;
     if (*buf == NULL || **buf == '\0')
@@ -39,12 +39,12 @@ int extract_message(char **buf, char **msg)
                 return (-1);
             strcpy(newbuf, *buf + len);
             *msg = calloc(1, len + 1);
-            if (!(*msg))      // !(*msg)
-            {                 // !
-                free(newbuf); // ! free
-                return (-1);  // ! -1
+            if (!(*msg))
+            {
+                free(newbuf);
+                return (-1);
             }
-            for (size_t j = 0; j < len; j++) // size_t
+            for (size_t j = 0; j < len; j++)
                 (*msg)[j] = (*buf)[j];
             (*msg)[len] = '\0';
             free(*buf);
@@ -64,21 +64,15 @@ int extract_message(char **buf, char **msg)
 
 char *str_join(char *buf, char *add)
 {
-    char *newbuf;
-    int len;
-
-    if (buf == 0)
-        len = 0;
-    else
-        len = strlen(buf);
-    newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
-    if (newbuf == 0)
-        return (0);
-    newbuf[0] = 0;
-    if (buf != 0)
+    int len = buf ? strlen(buf) : 0;
+    char *newbuf = calloc(1, len + strlen(add) + 1);
+    if (!newbuf)
+        fatal();
+    newbuf[0] = '\0';
+    if (buf)
         strcat(newbuf, buf);
-    free(buf);
     strcat(newbuf, add);
+    free(buf);
     return (newbuf);
 }
 
@@ -104,14 +98,14 @@ int main(int argc, char **argv)
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) != 0) // != 0
     {
         write(2, "Fatal erroe\n", 12);
-        close(sockfd); // close sockfd
+        close(sockfd);
         exit(1);
     }
 
-    if (listen(sockfd, 10) != 0) // != 0
+    if (listen(sockfd, 10) != 0)
     {
         write(2, "Fatal error\n", 12);
-        close(sockfd); // close sockfd
+        close(sockfd);
         exit(1);
     }
 
@@ -124,15 +118,15 @@ int main(int argc, char **argv)
     {
         FD_ZERO(&read_fds);
         FD_SET(sockfd, &read_fds);
-        for (t_client *tmp = clients; tmp; tmp = tmp->next) //
+        for (t_client *tmp = clients; tmp; tmp = tmp->next)
         {
-            FD_SET(tmp->fd, &read_fds); //
-            if (tmp->fd > max_fd)       //
-                max_fd = tmp->fd;       //
+            FD_SET(tmp->fd, &read_fds);
+            if (tmp->fd > max_fd)
+                max_fd = tmp->fd;
         }
 
-        if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) < 0) //
-            continue;                                            // for if if while
+        if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) < 0)
+            continue;
 
         if (FD_ISSET(sockfd, &read_fds))
         {
@@ -145,7 +139,7 @@ int main(int argc, char **argv)
                 if (!new)
                 {
                     write(2, "Fatal error\n", 12);
-                    close(client_fd); // close clientfd
+                    close(client_fd);
                     exit(1);
                 }
                 new->buf = NULL;
@@ -170,12 +164,12 @@ int main(int argc, char **argv)
             if (FD_ISSET(curr->fd, &read_fds))
             {
                 char buf[65536];
-                size_t ret = recv(curr->fd, buf, sizeof(buf) - 1, 0); // size_t
+                size_t ret = recv(curr->fd, buf, sizeof(buf) - 1, 0);
                 if (ret <= 0)
                 {
-                    if (curr->buf) // if curr->bur;
+                    if (curr->buf)
                     {
-                        char *line; // *
+                        char *line;
                         while (extract_message(&curr->buf, &line))
                         {
                             char msg[MMS + 100];
@@ -204,8 +198,8 @@ int main(int argc, char **argv)
                     continue;
                 }
                 buf[ret] = '\0';
-                curr->buf = str_join(curr->buf, buf); // !
-                if (!curr->buf)                       // !
+                curr->buf = str_join(curr->buf, buf);
+                if (!curr->buf)
                 {
                     write(2, "Fatal error\n", 12);
                     close(sockfd);
@@ -222,8 +216,8 @@ int main(int argc, char **argv)
                     free(line);
                 }
             }
-            prev = curr;       // prev = curr;
-            curr = curr->next; // curr = curr->next;
+            prev = curr;
+            curr = curr->next;
         }
     }
     return (0);
