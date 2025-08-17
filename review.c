@@ -1,8 +1,6 @@
 
 #include <arpa/inet.h>
-#include <errno.h>
 #include <netinet/in.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +8,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-const size_t MMS = 1024 * 1024;
+const size_t MMS = 1024 * 1024; // max message size 
 
 typedef struct s_client
 {
@@ -20,7 +18,7 @@ typedef struct s_client
     struct s_client *next;
 } t_client;
 
-int extract_message(char **buf, char **msg)
+int extract_message(char **buf, char **msg) // changed version of main
 {
     char *newbuf;
     size_t i;
@@ -62,7 +60,7 @@ int extract_message(char **buf, char **msg)
     return (0);
 }
 
-char *str_join(char *buf, char *add)
+char *str_join(char *buf, char *add) // changed version, calloc
 {
     int len = buf ? strlen(buf) : 0;
     char *newbuf = calloc(1, len + strlen(add) + 1);
